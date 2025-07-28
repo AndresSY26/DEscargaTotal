@@ -49,16 +49,22 @@ export function DownloadForm() {
             title: "¡Listo para descargar!",
             description: data.title,
         });
-        // Here you would typically show download options based on 'data'
+        // Aquí se mostrarían las opciones de descarga
       } else {
-        throw new Error(data.error || 'Ocurrió un error desconocido.');
+        setFormState('error');
+        toast({
+            variant: "destructive",
+            title: "Error al procesar",
+            description: data.error || 'Ocurrió un error inesperado.',
+        });
       }
+
     } catch (error) {
       setFormState('error');
-      const errorMessage = error instanceof Error ? error.message : "No pudimos procesar el enlace. Por favor, inténtalo de nuevo.";
+      const errorMessage = error instanceof Error ? error.message : "No pudimos conectar con el servidor. Revisa tu conexión.";
       toast({
           variant: "destructive",
-          title: "Error al procesar",
+          title: "Error de Conexión",
           description: errorMessage,
       });
     }
