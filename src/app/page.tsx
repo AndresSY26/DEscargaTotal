@@ -75,7 +75,7 @@ export default function Home() {
                   </svg>
                 </div>
               )}
-               <div className="p-6 bg-white/10 dark:bg-white/5 backdrop-blur-lg border border-white/10 dark:border-white/5 rounded-full mb-6 text-primary">
+               <div className="p-6 bg-white dark:bg-black border rounded-full mb-6 text-primary">
                 {step.icon}
               </div>
               <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
