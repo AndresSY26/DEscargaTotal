@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Innertube } from 'youtubei.js';
+import { Innertube, UniversalCache } from 'youtubei.js';
 
 function validateYouTubeUrl(url: string): boolean {
   if (!url) return false;
@@ -20,37 +20,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'La URL proporcionada no es válida o no es de YouTube.' }, { status: 400 });
     }
 
-    const yt = await Innertube.create();
+    const yt = await Innertube.create({ cache: new UniversalCache() });
     const info = await yt.getBasicInfo(url);
     
     const title = info.basic_info.title ?? 'Título no disponible';
-    const thumbnail = info.basic_info.thumbnail?.[0]?.url ?? '';
+    const thumbnail = info.basic_info.thumbnail?.at(0)?.url ?? '';
     const streamingData = info.streaming_data;
 
     if (!streamingData) {
       throw new Error('No se encontraron datos de streaming.');
     }
-
+    
     const formats = (streamingData.formats || []).map(format => ({
       format_id: format.itag,
       quality: format.quality_label ?? 'N/A',
       ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'unknown',
-      vcodec: format.mime_type?.includes('video') ? format.video_codec ?? 'N/A' : 'none',
-      acodec: format.mime_type?.includes('audio') ? format.audio_codec ?? 'N/A' : 'none',
-      url: format.decipher(yt.session.player),
+      vcodec: format.video_codec ?? 'none',
+      acodec: format.audio_codec ?? 'none',
+      url: format.url,
     })).sort((a,b) => (b.quality > a.quality) ? 1 : -1);
 
     const adaptiveFormats = (streamingData.adaptive_formats || []).map(format => {
-      const isVideo = format.mime_type?.includes('video');
-      const isAudio = format.mime_type?.includes('audio');
+      const isVideo = !!format.video_codec;
+      const isAudio = !!format.audio_codec;
       return {
         format_id: format.itag,
         quality: isVideo ? format.quality_label ?? 'N/A' : `Audio Only (${format.audio_sample_rate}Hz)`,
         ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'unknown',
-        vcodec: isVideo ? format.video_codec ?? 'N/A' : 'none',
-        acodec: isAudio ? format.audio_codec ?? 'N/A' : 'none',
+        vcodec: format.video_codec ?? 'none',
+        acodec: format.audio_codec ?? 'none',
         bitrate: format.bitrate,
-        url: format.decipher(yt.session.player),
+        url: format.url,
       }
     });
 
@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
             errorMessage = 'Este video no está disponible.';
         } else if (error.message.includes('This video is unavailable')) {
              errorMessage = 'Este video no está disponible.';
+        } else if (error.message.toLowerCase().includes('unsupported url')) {
+            errorMessage = 'La plataforma de esta URL no es compatible actualmente.';
         }
     }
     
