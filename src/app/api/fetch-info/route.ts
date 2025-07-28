@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!ytdl.validateURL(url)) {
-      return NextResponse.json({ success: false, error: 'La URL proporcionada no es válida.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'La URL proporcionada no es válida o no es compatible.' }, { status: 400 });
     }
 
     const info = await ytdl.getInfo(url);
@@ -52,9 +52,16 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Error fetching video info:', error);
     let errorMessage = 'No se pudo obtener la información del video. Puede que la URL sea incorrecta o el video no esté disponible.';
+    
+    // Check for specific error messages to provide better feedback
     if (error instanceof Error) {
-        // You can add more specific error checks here if needed
-        // For example, check for specific ytdl-core errors
+        if (error.message.includes('No video id found')) {
+            errorMessage = 'La URL no parece ser un video válido.';
+        } else if (error.message.includes('Private video')) {
+            errorMessage = 'Este video es privado y no se puede acceder a él.';
+        } else if (error.message.includes('Video unavailable')) {
+            errorMessage = 'Este video no está disponible.';
+        }
     }
     
     return NextResponse.json({ 
@@ -77,3 +84,5 @@ export async function DELETE() {
 export async function PATCH() {
     return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
 }
+
+    
