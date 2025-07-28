@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import YouTube from 'youtubei.js';
+import { ProxyAgent } from 'proxy-agent';
 
 /**
  * Parses a Netscape cookie file string into a format suitable for an HTTP Cookie header.
@@ -27,8 +28,8 @@ function parseNetscapeCookies(cookieText: string | undefined): string {
 }
 
 export async function POST(req: NextRequest) {
-  if (!process.env.YOUTUBE_COOKIES) {
-    console.error('Error: Las cookies de YouTube no están configuradas en el servidor.');
+  if (!process.env.YOUTUBE_COOKIES || !process.env.PROXY_URL) {
+    console.error('Error: Faltan las cookies de YouTube o la URL del proxy en el servidor.');
     return NextResponse.json({ success: false, error: 'La configuración del servidor está incompleta.' }, { status: 500 });
   }
 
@@ -40,19 +41,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'URL no proporcionada.' }, { status: 400 });
     }
     
-    // 1. Parse the cookies from the environment variable
     const formattedCookies = parseNetscapeCookies(process.env.YOUTUBE_COOKIES);
 
-    // 2. Create the YouTube instance with the formatted cookies
-    const youtube = await YouTube.create({ cookie: formattedCookies });
+    const youtube = await YouTube.create({
+      cookie: formattedCookies,
+      fetch_agent: new ProxyAgent({ uri: process.env.PROXY_URL }), 
+    });
 
-    // 3. Get video info
     const info = await youtube.getBasicInfo(url);
 
     const title = info.basic_info.title ?? 'Título no disponible';
     const thumbnail = info.basic_info.thumbnail?.url ?? '';
     
-    // 4. Process and return formats (example structure)
     const formats = info.streaming_data?.formats.map(format => ({
       quality: format.quality_label,
       ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'N/A',
