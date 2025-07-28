@@ -25,28 +25,32 @@ export async function POST(req: NextRequest) {
     
     const title = info.basic_info.title ?? 'Título no disponible';
     const thumbnail = info.basic_info.thumbnail?.[0]?.url ?? '';
-    const streamingData = await yt.getStreamingData(url);
+    const streamingData = info.streaming_data;
 
-    const formats = streamingData.formats.map(format => ({
+    if (!streamingData) {
+      throw new Error('No se encontraron datos de streaming.');
+    }
+
+    const formats = (streamingData.formats || []).map(format => ({
       format_id: format.itag,
       quality: format.quality_label ?? 'N/A',
-      ext: format.mime_type.split(';')[0].split('/')[1] ?? 'unknown',
-      vcodec: format.mime_type.includes('video') ? format.codec ?? 'N/A' : 'none',
-      acodec: format.mime_type.includes('audio') ? format.codec ?? 'N/A' : 'none',
-      url: format.url,
+      ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'unknown',
+      vcodec: format.mime_type?.includes('video') ? format.video_codec ?? 'N/A' : 'none',
+      acodec: format.mime_type?.includes('audio') ? format.audio_codec ?? 'N/A' : 'none',
+      url: format.decipher(yt.session.player),
     })).sort((a,b) => (b.quality > a.quality) ? 1 : -1);
 
-    const adaptiveFormats = streamingData.adaptive_formats.map(format => {
-      const isVideo = format.mime_type.includes('video');
-      const isAudio = format.mime_type.includes('audio');
+    const adaptiveFormats = (streamingData.adaptive_formats || []).map(format => {
+      const isVideo = format.mime_type?.includes('video');
+      const isAudio = format.mime_type?.includes('audio');
       return {
         format_id: format.itag,
         quality: isVideo ? format.quality_label ?? 'N/A' : `Audio Only (${format.audio_sample_rate}Hz)`,
-        ext: format.mime_type.split(';')[0].split('/')[1] ?? 'unknown',
-        vcodec: isVideo ? format.codec ?? 'N/A' : 'none',
-        acodec: isAudio ? format.codec ?? 'N/A' : 'none',
+        ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'unknown',
+        vcodec: isVideo ? format.video_codec ?? 'N/A' : 'none',
+        acodec: isAudio ? format.audio_codec ?? 'N/A' : 'none',
         bitrate: format.bitrate,
-        url: format.url,
+        url: format.decipher(yt.session.player),
       }
     });
 
