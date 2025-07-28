@@ -1,38 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import YouTube from 'youtubei.js';
-import { ProxyAgent } from 'proxy-agent';
-
-/**
- * Parses a Netscape cookie file string into a format suitable for an HTTP Cookie header.
- * @param cookieText The raw text from the cookies.txt file.
- * @returns A formatted cookie string (e.g., "key=value; key2=value2").
- */
-function parseNetscapeCookies(cookieText: string | undefined): string {
-  if (!cookieText) return '';
-
-  return cookieText
-    .split('\n')
-    .map(line => line.trim())
-    // Ignore comments and empty lines
-    .filter(line => line.length > 0 && !line.startsWith('#'))
-    .map(line => {
-      const parts = line.split('\t');
-      // A valid Netscape line has 7 parts. The name is at index 5 and value at index 6.
-      if (parts.length === 7) {
-        return `${parts[5]}=${parts[6]}`;
-      }
-      return null;
-    })
-    .filter(cookie => cookie !== null)
-    .join('; ');
-}
+import { Innertube, UniversalCache } from 'youtubei.js';
 
 export async function POST(req: NextRequest) {
-  if (!process.env.YOUTUBE_COOKIES || !process.env.PROXY_URL) {
-    console.error('Error: Faltan las cookies de YouTube o la URL del proxy en el servidor.');
-    return NextResponse.json({ success: false, error: 'La configuración del servidor está incompleta.' }, { status: 500 });
-  }
-
   try {
     const body = await req.json();
     const { url } = body;
@@ -41,11 +10,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'URL no proporcionada.' }, { status: 400 });
     }
     
-    const formattedCookies = parseNetscapeCookies(process.env.YOUTUBE_COOKIES);
-
-    const youtube = await YouTube.create({
-      cookie: formattedCookies,
-      fetch_agent: new ProxyAgent({ uri: process.env.PROXY_URL }), 
+    // SOLUCIÓN: Crear una instancia de Innertube generando una sesión localmente
+    const youtube = await Innertube.create({ 
+      cache: new UniversalCache(false), 
+      generate_session_locally: true 
     });
 
     const info = await youtube.getBasicInfo(url);
@@ -57,26 +25,38 @@ export async function POST(req: NextRequest) {
       quality: format.quality_label,
       ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'N/A',
       url: format.url,
+      has_audio: format.has_audio,
+      has_video: format.has_video
     })) ?? [];
+
+    // Separar solo audio y solo video si es necesario o unirlos
+    const videoAndAudioFormats = formats.filter(f => f.has_video && f.has_audio);
+    const audioOnlyFormats = formats.filter(f => f.has_audio && !f.has_video);
+    const videoOnlyFormats = formats.filter(f => f.has_video && !f.has_audio);
 
     return NextResponse.json({
       success: true,
       title,
       thumbnail,
-      formats,
+      // Devuelve los formatos de una manera que el front-end pueda entender
+      formats: {
+          videoAndAudio: videoAndAudioFormats,
+          audioOnly: audioOnlyFormats,
+          videoOnly: videoOnlyFormats
+      }
     }, { status: 200 });
 
   } catch (error) {
     console.error('Error fetching video info:', error);
     return NextResponse.json({
       success: false,
-      error: 'No se pudo obtener la información del video.',
+      error: 'No se pudo obtener la información del video. Puede que el video no esté disponible o la URL sea incorrecta.',
       debug_error: (error instanceof Error) ? error.message : String(error),
     }, { status: 500 });
   }
 }
 
-// Handle other methods by returning 405 Method Not Allowed
+// Manejar otros métodos
 export async function GET() {
   return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
 }
