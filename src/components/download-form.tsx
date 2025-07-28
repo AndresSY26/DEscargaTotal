@@ -76,13 +76,13 @@ export function DownloadForm() {
         placeholder="Pega aquí el enlace del video..."
         value={url}
         onChange={handleInputChange}
-        className="flex-grow h-14 text-lg"
+        className="flex-grow h-14 text-lg rounded-lg"
         aria-label="Enlace del video"
       />
       <Button 
         type="submit" 
         size="lg" 
-        className="h-14 w-full md:w-auto text-lg" 
+        className="h-14 w-full md:w-auto text-lg rounded-lg transition-transform duration-200 hover:scale-105" 
         disabled={!isUrlValid || formState === 'loading'}
       >
         {getButtonContent()}
