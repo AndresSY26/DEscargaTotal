@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
 
-const URL_REGEX = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+// A more flexible regex that validates most URLs, including query parameters.
+const URL_REGEX = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
 
 type FormState = 'idle' | 'loading' | 'error' | 'success';
 
@@ -17,7 +18,7 @@ export function DownloadForm() {
 
   const isUrlValid = useMemo(() => URL_REGEX.test(url), [url]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isUrlValid) {
         toast({
@@ -30,25 +31,37 @@ export function DownloadForm() {
 
     setFormState('loading');
     
-    // Simulate API call
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.2; // 80% chance of success
-      if (isSuccess) {
+    try {
+      const response = await fetch('/api/fetch-info', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         setFormState('success');
+        console.log('Video Info:', data);
         toast({
             title: "¡Listo para descargar!",
-            description: "Tu archivo ha sido procesado y está listo.",
+            description: data.title,
         });
-        // Here you would typically show download options
+        // Here you would typically show download options based on 'data'
       } else {
-        setFormState('error');
-        toast({
-            variant: "destructive",
-            title: "Error al procesar",
-            description: "No pudimos procesar el enlace. Por favor, inténtalo de nuevo.",
-        });
+        throw new Error(data.error || 'Ocurrió un error desconocido.');
       }
-    }, 2000);
+    } catch (error) {
+      setFormState('error');
+      const errorMessage = error instanceof Error ? error.message : "No pudimos procesar el enlace. Por favor, inténtalo de nuevo.";
+      toast({
+          variant: "destructive",
+          title: "Error al procesar",
+          description: errorMessage,
+      });
+    }
   };
   
   const getButtonContent = () => {
@@ -64,7 +77,7 @@ export function DownloadForm() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUrl(e.target.value);
-    if(formState === 'error') {
+    if(formState === 'error' || formState === 'success') {
         setFormState('idle');
     }
   }
@@ -72,7 +85,7 @@ export function DownloadForm() {
   return (
     <form onSubmit={handleSubmit} className="w-full space-y-4 md:space-y-0 md:flex md:space-x-2">
       <Input
-        type="text"
+        type="url"
         placeholder="Pega aquí el enlace del video..."
         value={url}
         onChange={handleInputChange}
