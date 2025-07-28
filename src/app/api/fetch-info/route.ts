@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ 
       success: false, 
       error: errorMessage,
+      debug_error: (error instanceof Error) ? error.message : String(error)
     }, { status: 500 });
   }
 }

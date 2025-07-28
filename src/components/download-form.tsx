@@ -52,6 +52,7 @@ export function DownloadForm() {
         // Aquí se mostrarían las opciones de descarga
       } else {
         setFormState('error');
+        console.log('RESPUESTA DETALLADA DEL ERROR DEL BACKEND:', data);
         toast({
             variant: "destructive",
             title: "Error al procesar",
