@@ -4,6 +4,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Plus, Minus } from "lucide-react"
 
 const faqs = [
   {
@@ -30,15 +31,29 @@ const faqs = [
 
 export default function FaqPage() {
   return (
-    <div className="container mx-auto px-4 py-8 md:py-16">
+    <div className="container mx-auto px-4 py-16 md:py-24">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl md:text-4xl font-bold text-center mb-8">Preguntas Frecuentes (FAQ)</h1>
-        <Accordion type="single" collapsible className="w-full">
+        <header className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">Preguntas Frecuentes</h1>
+          <p className="mt-4 text-lg text-muted-foreground">
+            Encuentra respuestas a las dudas más comunes sobre nuestro servicio.
+          </p>
+        </header>
+        
+        <Accordion type="single" collapsible className="w-full space-y-4">
           {faqs.map((faq, index) => (
-            <AccordionItem value={`item-${index}`} key={index}>
-              <AccordionTrigger className="text-left">{faq.question}</AccordionTrigger>
-              <AccordionContent>
-                {faq.answer}
+            <AccordionItem 
+              value={`item-${index}`} 
+              key={index}
+              className="bg-white dark:bg-black rounded-lg shadow-sm border-none"
+            >
+              <AccordionTrigger className="group text-left font-semibold text-lg hover:no-underline px-6 py-4 data-[state=open]:text-primary">
+                <span className="flex-1">{faq.question}</span>
+                <Plus className="h-6 w-6 shrink-0 transition-transform duration-300 ease-in-out group-data-[state=open]:hidden" />
+                <Minus className="h-6 w-6 shrink-0 transition-transform duration-300 ease-in-out hidden group-data-[state=open]:block" />
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-4">
+                <p className="text-muted-foreground leading-relaxed">{faq.answer}</p>
               </AccordionContent>
             </AccordionItem>
           ))}
