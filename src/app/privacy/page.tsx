@@ -26,10 +26,12 @@ export default function PrivacyPolicyPage() {
         <h2>4. Cookies</h2>
         <p>
           Nuestro sitio web utiliza cookies para mejorar su experiencia. Una cookie es un pequeño archivo de texto que un sitio web guarda en su computadora o dispositivo móvil cuando visita el sitio. Utilizamos cookies para:
-          <ul>
-            <li>Guardar su preferencia de tema (claro/oscuro/sistema).</li>
-            <li>Analizar el tráfico del sitio de forma anónima.</li>
-          </ul>
+        </p>
+        <ul>
+          <li>Guardar su preferencia de tema (claro/oscuro/sistema).</li>
+          <li>Analizar el tráfico del sitio de forma anónima.</li>
+        </ul>
+        <p>
           Puede controlar y/o eliminar las cookies como lo desee.
         </p>
 
