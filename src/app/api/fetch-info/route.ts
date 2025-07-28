@@ -8,6 +8,11 @@ function validateYouTubeUrl(url: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  if (!process.env.YOUTUBE_COOKIES) {
+    console.error('Error: Las cookies de YouTube no están configuradas en el servidor.');
+    return NextResponse.json({ success: false, error: 'La configuración del servidor está incompleta.' }, { status: 500 });
+  }
+
   try {
     const body = await req.json();
     const { url } = body;
@@ -20,7 +25,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'La URL proporcionada no es válida o no es de YouTube.' }, { status: 400 });
     }
 
-    const yt = await Innertube.create({ cache: new UniversalCache() });
+    const yt = await Innertube.create({ 
+      cache: new UniversalCache(),
+      cookie: process.env.YOUTUBE_COOKIES 
+    });
+    
     const info = await yt.getBasicInfo(url);
     
     const title = info.basic_info.title ?? 'Título no disponible';
