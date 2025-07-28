@@ -26,7 +26,7 @@ const iconMap = {
 
 export function PlatformCard({ name, description, icon }: PlatformCardProps) {
   return (
-    <Card className="transition-all duration-300 hover:shadow-xl hover:-translate-y-2">
+    <Card className="transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 bg-white/10 dark:bg-white/5 backdrop-blur-lg border border-white/10 dark:border-white/5">
       <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-2">
         {iconMap[icon]}
         <CardTitle>{name}</CardTitle>

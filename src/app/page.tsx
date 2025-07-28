@@ -22,17 +22,17 @@ const platforms = [
 
 const instructions = [
   {
-    icon: <ClipboardPaste className="h-12 w-12 mb-4 text-primary" />,
+    icon: <ClipboardPaste className="h-12 w-12" />,
     title: '1. Pega el enlace',
     description: 'Copia la URL del video o audio que deseas y pégala en el campo de arriba.',
   },
   {
-    icon: <ListVideo className="h-12 w-12 mb-4 text-primary" />,
+    icon: <ListVideo className="h-12 w-12" />,
     title: '2. Elige el formato',
     description: 'Selecciona el formato de archivo y la calidad que mejor se adapte a tus necesidades.',
   },
   {
-    icon: <Download className="h-12 w-12 mb-4 text-primary" />,
+    icon: <Download className="h-12 w-12" />,
     title: '3. Descarga',
     description: 'Haz clic en descargar y guarda el archivo directamente en tu dispositivo. ¡Gratis y rápido!',
   },
@@ -66,9 +66,16 @@ export default function Home() {
       <section>
         <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">¿Cómo Funciona?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 text-center">
-          {instructions.map((step) => (
-            <div key={step.title} className="flex flex-col items-center">
-              <div className="p-4 bg-gradient-to-br from-primary/20 via-accent/20 to-primary/20 rounded-full mb-4">
+          {instructions.map((step, index) => (
+            <div key={step.title} className="relative flex flex-col items-center">
+              {index < instructions.length - 1 && (
+                <div className="absolute top-12 left-1/2 w-full h-px -translate-x-1/2 hidden md:block">
+                  <svg width="100%" height="2">
+                    <line x1="55%" y1="0" x2="145%" y2="0" stroke="hsl(var(--border))" strokeWidth="1" strokeDasharray="4 4" />
+                  </svg>
+                </div>
+              )}
+               <div className="p-6 bg-white/10 dark:bg-white/5 backdrop-blur-lg border border-white/10 dark:border-white/5 rounded-full mb-6 text-primary">
                 {step.icon}
               </div>
               <h3 className="text-xl font-semibold mb-2">{step.title}</h3>
