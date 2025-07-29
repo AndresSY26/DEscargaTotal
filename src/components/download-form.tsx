@@ -5,6 +5,7 @@ import { Download, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from "@/hooks/use-toast";
+import { DownloadOptions } from './download-options';
 
 // A more flexible regex that validates most URLs, including query parameters.
 const URL_REGEX = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
@@ -14,6 +15,7 @@ type FormState = 'idle' | 'loading' | 'error' | 'success';
 export function DownloadForm() {
   const [url, setUrl] = useState('');
   const [formState, setFormState] = useState<FormState>('idle');
+  const [videoInfo, setVideoInfo] = useState<any>(null);
   const { toast } = useToast();
 
   const isUrlValid = useMemo(() => URL_REGEX.test(url), [url]);
@@ -30,6 +32,7 @@ export function DownloadForm() {
     }
 
     setFormState('loading');
+    setVideoInfo(null);
     
     try {
       const response = await fetch('/api/fetch-info', {
@@ -45,11 +48,11 @@ export function DownloadForm() {
       if (response.ok && data.success) {
         setFormState('success');
         console.log('Video Info:', data);
+        setVideoInfo(data); // Guardar datos del video
         toast({
-            title: "¡Listo para descargar!",
-            description: data.title,
+            title: "¡Información obtenida!",
+            description: "Elige un formato para descargar.",
         });
-        // Aquí se mostrarían las opciones de descarga
       } else {
         setFormState('error');
         console.log('RESPUESTA DETALLADA DEL ERROR DEL BACKEND:', data);
@@ -78,35 +81,43 @@ export function DownloadForm() {
         case 'error':
              return <><AlertCircle className="mr-2 h-4 w-4" /> Reintentar</>;
         default:
-            return <><Download className="mr-2 h-4 w-4" /> Descargar</>;
+            return <><Download className="mr-2 h-4 w-4" /> Obtener Información</>;
     }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUrl(e.target.value);
+    setVideoInfo(null); // Limpiar resultados anteriores
     if(formState === 'error' || formState === 'success') {
         setFormState('idle');
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full space-y-4 md:space-y-0 md:flex md:space-x-2">
-      <Input
-        type="url"
-        placeholder="Pega aquí el enlace del video..."
-        value={url}
-        onChange={handleInputChange}
-        className="flex-grow h-14 text-lg rounded-lg"
-        aria-label="Enlace del video"
-      />
-      <Button 
-        type="submit" 
-        size="lg" 
-        className="h-14 w-full md:w-auto text-lg rounded-lg transition-transform duration-200 hover:scale-105" 
-        disabled={!isUrlValid || formState === 'loading'}
-      >
-        {getButtonContent()}
-      </Button>
-    </form>
+    <div className="w-full">
+      <form onSubmit={handleSubmit} className="w-full space-y-4 md:space-y-0 md:flex md:space-x-2">
+        <Input
+          type="url"
+          placeholder="Pega aquí el enlace del video..."
+          value={url}
+          onChange={handleInputChange}
+          className="flex-grow h-14 text-lg rounded-lg"
+          aria-label="Enlace del video"
+        />
+        <Button 
+          type="submit" 
+          size="lg" 
+          className="h-14 w-full md:w-auto text-lg rounded-lg transition-transform duration-200 hover:scale-105" 
+          disabled={!isUrlValid || formState === 'loading'}
+        >
+          {getButtonContent()}
+        </Button>
+      </form>
+      {videoInfo && (
+        <div className="mt-8">
+          <DownloadOptions info={videoInfo} />
+        </div>
+      )}
+    </div>
   );
 }
