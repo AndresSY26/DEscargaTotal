@@ -1,12 +1,14 @@
 "use client";
 
 import Image from 'next/image';
-import { Download, Clapperboard, Music } from 'lucide-react';
+import { Download, Clapperboard, Music, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from "@/hooks/use-toast";
 
 type Format = {
   quality: string;
@@ -26,7 +28,6 @@ type DownloadOptionsProps = {
   };
 };
 
-// Función para formatear el tamaño del archivo
 const formatFileSize = (bytes: number | null | undefined): string => {
   if (bytes === null || bytes === undefined || bytes === 0) {
     return 'N/A';
@@ -38,24 +39,63 @@ const formatFileSize = (bytes: number | null | undefined): string => {
 };
 
 export function DownloadOptions({ info }: DownloadOptionsProps) {
+  const { toast } = useToast();
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const videoFormats = info.formats.filter(f => f.has_video).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
   const audioFormats = info.formats.filter(f => f.has_audio && !f.has_video).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
+  
+  const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
 
-  const handleDownload = (format: Format) => {
-    // Crear un enlace oculto para iniciar la descarga
-    const link = document.createElement('a');
-    link.href = format.url;
-    // Sugerir un nombre de archivo al navegador
-    link.setAttribute('download', `${info.title} - ${format.quality}.${format.ext}`);
-    // Ocultar el enlace
-    link.style.display = 'none';
-    // Añadir el enlace al DOM
-    document.body.appendChild(link);
-    // Simular un clic para iniciar la descarga
-    link.click();
-    // Limpiar eliminando el enlace del DOM
-    document.body.removeChild(link);
+  const handleDownload = async (format: Format) => {
+    setIsDownloading(true);
+
+    try {
+      if (!format.has_audio && bestAudio) {
+        // Video sin audio, necesita unir.
+        toast({ title: 'Preparando descarga...', description: 'Uniendo video y audio. Esto puede tardar un momento.' });
+        
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoUrl: format.url, audioUrl: bestAudio.url }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Falló la unión del video en el servidor.');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${info.title} - ${format.quality}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+      } else {
+        // Formato con audio o solo audio, descarga directa.
+        toast({ title: 'Iniciando descarga directa...' });
+        const a = document.createElement('a');
+        a.href = format.url;
+        a.setAttribute('download', `${info.title} - ${format.quality}.${format.ext}`);
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (error) {
+       toast({
+        variant: "destructive",
+        title: "Error en la descarga",
+        description: error instanceof Error ? error.message : "Ocurrió un error desconocido.",
+       });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const renderFormatTable = (formats: Format[], type: 'video' | 'audio') => {
@@ -79,8 +119,12 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
               <TableCell>{format.ext}</TableCell>
               <TableCell>{formatFileSize(format.filesize)}</TableCell>
               <TableCell className="text-right">
-                <Button size="sm" onClick={() => handleDownload(format)}>
-                  <Download className="mr-2 h-4 w-4" />
+                <Button size="sm" onClick={() => handleDownload(format)} disabled={isDownloading}>
+                  {isDownloading ? (
+                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
                   Descargar
                 </Button>
               </TableCell>
