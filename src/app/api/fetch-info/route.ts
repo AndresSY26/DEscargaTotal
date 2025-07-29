@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import YTDlpWrap from 'yt-dlp-wrap';
-import path from 'path';
 
-// Nota para la IA: En un entorno de servidor real (VPS), descargarías el binario de yt-dlp.
-// En un entorno serverless como este, intentaremos referenciarlo, aunque es probable que falle.
+// Inicializar una única vez para reutilizar la instancia
 const ytDlpWrap = new YTDlpWrap();
-
-// Configura la ruta al binario si fuera necesario (esto es un ejemplo)
-// YTDlpWrap.setBinaryPath(path.resolve('./bin/yt-dlp'));
-
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,18 +12,12 @@ export async function POST(req: NextRequest) {
     if (!url || typeof url !== 'string') {
       return NextResponse.json({ success: false, error: 'URL no proporcionada.' }, { status: 400 });
     }
-
-    // yt-dlp puede manejar múltiples plataformas directamente
+    
     console.log(`Procesando URL con yt-dlp: ${url}`);
-    
-    // Obtener toda la metadata del video en formato JSON
     const metadata = await ytDlpWrap.getVideoInfo(url);
-    
     const { title, thumbnail, formats } = metadata;
-
     const isTiktok = url.includes('tiktok.com');
 
-    // Mapear los formatos a la estructura que el front-end espera
     const processedFormats = formats.map(format => ({
       quality: format.format_note || format.resolution || 'N/A',
       ext: format.ext,
@@ -45,22 +33,21 @@ export async function POST(req: NextRequest) {
       title,
       thumbnail,
       formats: processedFormats,
-      isTiktok, // Enviamos una bandera para que el frontend sepa cómo comportarse
+      isTiktok, // Enviamos esta bandera al front-end
     }, { status: 200 });
 
   } catch (error) {
-    console.error('Error Crítico en /api/fetch-info con yt-dlp:', error);
+    console.error('Error Crítico en /api/fetch-info:', error);
     
-    let errorMessage = 'No se pudo obtener la información del video. La herramienta yt-dlp falló en el servidor.';
+    let errorMessage = 'No se pudo obtener la información del video.';
     let debugError = (error instanceof Error) ? error.message : String(error);
 
-    // yt-dlp suele incluir mensajes de error muy claros
     if (debugError.includes('Unsupported URL')) {
         errorMessage = 'La URL no corresponde a una plataforma compatible.';
     } else if (debugError.includes('403')) {
         errorMessage = 'Acceso prohibido. El video puede ser privado o requerir inicio de sesión.';
-    } else if (debugError.includes('hidden')) {
-        errorMessage = 'El video de TikTok está oculto o no se pudo encontrar.';
+    } else if (debugError.includes('HTTP error 404')) {
+        errorMessage = 'El video no fue encontrado o fue eliminado.';
     }
 
     return NextResponse.json({
@@ -71,7 +58,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Manejar otros métodos HTTP
 export async function GET() {
   return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
 }

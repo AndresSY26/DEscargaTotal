@@ -43,18 +43,23 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
   const { toast } = useToast();
   const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
   
-  // --- Lógica de Formatos General ---
   const videoFormats = info.formats
     .filter(f => f.has_video && !f.quality.includes('x'))
     .sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
     
-  const audioFormats = info.formats.filter(f => f.has_audio && !f.has_video && !f.quality.includes('Default')).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
+  const audioFormats = info.formats
+    .filter(f => f.has_audio && !f.has_video && !f.quality.includes('Default'))
+    .sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
   
   const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
 
   // --- Lógica Específica para TikTok ---
   const tiktokNoWatermarkVideo = info.isTiktok 
-    ? info.formats.find(f => f.format_id?.includes('h264_nowm') || f.format_id?.includes('nowm')) 
+    ? info.formats.find(f => f.format_id === 'tiktok-nowm') 
+    : null;
+    
+  const tiktokAudio = info.isTiktok
+    ? info.formats.find(f => f.format_id === 'tiktok-audio')
     : null;
 
 
@@ -64,8 +69,8 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
     try {
       const safeTitle = info.title.replace(/[/\\?%*:|"<>]/g, '-');
 
-      if (action === 'audio' || (action === 'tiktok-video' && format.url)) {
-         toast({ title: 'Iniciando descarga...', description: 'Tu archivo se está preparando.' });
+      if (action === 'audio' || action === 'tiktok-video') {
+        toast({ title: 'Iniciando descarga...', description: 'Tu archivo se está preparando.' });
         const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(format.url)}&title=${encodeURIComponent(safeTitle)}&ext=${format.ext}`;
 
         const link = document.createElement('a');
@@ -75,27 +80,16 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         link.click();
         document.body.removeChild(link);
 
-      } else if (action === 'tiktok-mp3' && format.url) {
-        toast({ title: 'Preparando conversión a MP3...', description: 'Esto puede tardar un momento.' });
-        const proxyUrl = `/api/convert-to-mp3?url=${encodeURIComponent(format.url)}&title=${encodeURIComponent(safeTitle)}`;
-
-        // Hacemos el fetch para obtener el blob y forzar descarga
-        const response = await fetch(proxyUrl);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Falló la conversión en el servidor.');
-        }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${safeTitle}.mp3`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
-        toast({ title: '¡Descarga completada!', description: 'El MP3 se ha guardado en tu dispositivo.'});
+      } else if (action === 'tiktok-mp3' && tiktokAudio) {
+        toast({ title: 'Iniciando descarga de audio...', description: 'Tu archivo se está preparando.' });
+        const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(tiktokAudio.url)}&title=${encodeURIComponent(safeTitle)}&ext=${tiktokAudio.ext}`;
+        
+        const link = document.createElement('a');
+        link.href = proxyUrl;
+        link.setAttribute('download', `${safeTitle}.${tiktokAudio.ext}`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
 
       } else if (action === 'video' && format.has_video && bestAudio) {
         toast({ title: 'Preparando descarga...', description: 'Uniendo video y audio. Esto puede tardar un momento.' });
@@ -123,7 +117,7 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         a.href = url;
         
         const contentDisposition = response.headers.get('Content-Disposition');
-        let filename = `${info.title.replace(/[^a-z0-9\s]/gi, '').replace(/\s+/g, '_')}.mp4`;
+        let filename = `${safeTitle}.mkv`;
         if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
             if (filenameMatch && filenameMatch.length > 1) {
@@ -194,68 +188,73 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
   };
   
   const renderTikTokContent = () => {
-    if (!tiktokNoWatermarkVideo) {
-        return <p className="text-muted-foreground text-center p-8">No se encontró una versión sin marca de agua.</p>;
-    }
-    const isDownloading = downloadingUrl === tiktokNoWatermarkVideo.url;
-
     return (
         <Tabs defaultValue="video" className="mt-4">
         <TabsList>
-            <TabsTrigger value="video">
+            <TabsTrigger value="video" disabled={!tiktokNoWatermarkVideo}>
             <Clapperboard className="mr-2 h-4 w-4" /> Video (Sin Marca)
             </TabsTrigger>
-            <TabsTrigger value="audio">
-            <Music className="mr-2 h-4 w-4" /> Audio MP3
+            <TabsTrigger value="audio" disabled={!tiktokAudio}>
+            <Music className="mr-2 h-4 w-4" /> Audio
             </TabsTrigger>
         </TabsList>
         <TabsContent value="video" className="mt-4">
-             <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Calidad</TableHead>
-                        <TableHead>Formato</TableHead>
-                        <TableHead>Tamaño</TableHead>
-                        <TableHead className="text-right">Acción</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow>
-                        <TableCell className="font-medium">{tiktokNoWatermarkVideo.quality} (Sin Marca)</TableCell>
-                        <TableCell>{tiktokNoWatermarkVideo.ext}</TableCell>
-                        <TableCell>{formatFileSize(tiktokNoWatermarkVideo.filesize)}</TableCell>
-                        <TableCell className="text-right">
-                             <Button size="sm" onClick={() => handleDownload(tiktokNoWatermarkVideo, 'tiktok-video')} disabled={!!downloadingUrl}>
-                                {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                {isDownloading ? 'Descargando...' : 'Descargar'}
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
-             </Table>
+             {tiktokNoWatermarkVideo ? (
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Calidad</TableHead>
+                            <TableHead>Formato</TableHead>
+                            <TableHead>Tamaño</TableHead>
+                            <TableHead className="text-right">Acción</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow>
+                            <TableCell className="font-medium">{tiktokNoWatermarkVideo.quality}</TableCell>
+                            <TableCell>{tiktokNoWatermarkVideo.ext}</TableCell>
+                            <TableCell>{formatFileSize(tiktokNoWatermarkVideo.filesize)}</TableCell>
+                            <TableCell className="text-right">
+                                <Button size="sm" onClick={() => handleDownload(tiktokNoWatermarkVideo, 'tiktok-video')} disabled={!!downloadingUrl}>
+                                    {downloadingUrl === tiktokNoWatermarkVideo.url ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                                    {downloadingUrl === tiktokNoWatermarkVideo.url ? 'Descargando...' : 'Descargar'}
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
+             ) : (
+                <p className="text-muted-foreground text-center p-8">No se encontró una versión de video sin marca de agua.</p>
+             )}
         </TabsContent>
         <TabsContent value="audio" className="mt-4">
-             <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Calidad</TableHead>
-                        <TableHead>Formato</TableHead>
-                        <TableHead className="text-right">Acción</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow>
-                        <TableCell className="font-medium">128kbps</TableCell>
-                        <TableCell>mp3</TableCell>
-                        <TableCell className="text-right">
-                             <Button size="sm" onClick={() => handleDownload(tiktokNoWatermarkVideo, 'tiktok-mp3')} disabled={!!downloadingUrl}>
-                                {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                                {isDownloading ? 'Convirtiendo...' : 'Descargar'}
-                            </Button>
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
-             </Table>
+            {tiktokAudio ? (
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Calidad</TableHead>
+                            <TableHead>Formato</TableHead>
+                            <TableHead>Tamaño</TableHead>
+                            <TableHead className="text-right">Acción</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow>
+                            <TableCell className="font-medium">{tiktokAudio.quality}</TableCell>
+                            <TableCell>{tiktokAudio.ext}</TableCell>
+                            <TableCell>{formatFileSize(tiktokAudio.filesize)}</TableCell>
+                            <TableCell className="text-right">
+                                <Button size="sm" onClick={() => handleDownload(tiktokAudio, 'tiktok-mp3')} disabled={!!downloadingUrl}>
+                                    {downloadingUrl === tiktokAudio.url ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                                    {downloadingUrl === tiktokAudio.url ? 'Descargando...' : 'Descargar'}
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
+            ) : (
+                 <p className="text-muted-foreground text-center p-8">No se encontró una versión de solo audio.</p>
+            )}
         </TabsContent>
         </Tabs>
     )
