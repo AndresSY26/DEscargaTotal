@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
         errorMessage = 'La URL no corresponde a una plataforma compatible.';
     } else if (debugError.includes('403')) {
         errorMessage = 'Acceso prohibido. El video puede ser privado o requerir inicio de sesión.';
+    } else if (debugError.includes('hidden')) {
+        errorMessage = 'El video de TikTok está oculto o no se pudo encontrar.';
     }
 
     return NextResponse.json({
