@@ -54,18 +54,17 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
 
     try {
       if (isAudio) {
-         toast({ title: 'Iniciando descarga directa...' });
-         const response = await fetch(format.url);
-         const blob = await response.blob();
-         const url = window.URL.createObjectURL(blob);
-         const a = document.createElement('a');
-         a.href = url;
-         a.setAttribute('download', `${info.title} - ${format.quality}.${format.ext}`);
-         a.style.display = 'none';
-         document.body.appendChild(a);
-         a.click();
-         window.URL.revokeObjectURL(url);
-         document.body.removeChild(a);
+        toast({ title: 'Iniciando descarga...', description: 'Tu archivo se está preparando.' });
+        const safeTitle = info.title.replace(/[/\\?%*:|"<>]/g, '-');
+        const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(format.url)}&title=${encodeURIComponent(safeTitle)}&ext=${format.ext}`;
+
+        const link = document.createElement('a');
+        link.href = proxyUrl;
+        link.setAttribute('download', `${safeTitle}.${format.ext}`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      
       } else if (format.has_video && bestAudio) {
         toast({ title: 'Preparando descarga...', description: 'Uniendo video y audio. Esto puede tardar un momento.' });
         
