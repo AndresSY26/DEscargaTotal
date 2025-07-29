@@ -72,7 +72,7 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
             audioUrl: bestAudio.url,
             title: info.title,
             quality: format.quality,
-            ext: format.ext
+            ext: 'mp4' // Force mp4 extension for merged files
           }),
         });
 
@@ -87,7 +87,7 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         a.href = url;
         
         const safeTitle = (info.title || 'video').replace(/[^a-z0-9\\s]/gi, '').replace(/\\s+/g, '_');
-        const finalFilename = `${safeTitle}_${format.quality}.mkv`;
+        const finalFilename = `${safeTitle}_${format.quality}.mp4`;
         a.download = finalFilename;
 
         document.body.appendChild(a);
