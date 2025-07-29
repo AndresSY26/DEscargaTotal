@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Innertube, UniversalCache } from 'youtubei.js';
+import YTDlpWrap from 'yt-dlp-wrap';
+import path from 'path';
+
+// Nota para la IA: En un entorno de servidor real (VPS), descargarías el binario de yt-dlp.
+// En un entorno serverless como este, intentaremos referenciarlo, aunque es probable que falle.
+const ytDlpWrap = new YTDlpWrap();
+
+// Configura la ruta al binario si fuera necesario (esto es un ejemplo)
+// YTDlpWrap.setBinaryPath(path.resolve('./bin/yt-dlp'));
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,76 +19,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'URL no proporcionada.' }, { status: 400 });
     }
 
-    // --- IDENTIFICACIÓN DE PLATAFORMA ---
+    // yt-dlp puede manejar múltiples plataformas directamente
+    console.log(`Procesando URL con yt-dlp: ${url}`);
+    
+    // Obtener toda la metadata del video en formato JSON
+    const metadata = await ytDlpWrap.getVideoInfo(url);
+    
+    const { title, thumbnail, formats } = metadata;
 
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      // --- LÓGICA PARA YOUTUBE ---
-      
-      console.log('Procesando URL de YouTube...');
-      
-      // SOLUCIÓN: Usar 'generate_session_locally' para crear una sesión de visitante válida.
-      // Esto simula ser un nuevo cliente y es el método recomendado en los ejemplos oficiales.
-      const youtube = await Innertube.create({ 
-        cache: new UniversalCache(false), 
-        generate_session_locally: true 
-      });
+    // Mapear los formatos a la estructura que el front-end espera
+    const processedFormats = formats.map(format => ({
+      quality: format.format_note || format.resolution || 'N/A',
+      ext: format.ext,
+      url: format.url,
+      has_audio: format.acodec !== 'none',
+      has_video: format.vcodec !== 'none',
+      filesize: format.filesize || format.filesize_approx || null
+    }));
 
-      const info = await youtube.getBasicInfo(url);
-
-      const title = info.basic_info.title ?? 'Título no disponible';
-      const thumbnail = info.basic_info.thumbnail?.url ?? '';
-      
-      const formats = info.streaming_data?.formats.map(format => ({
-        quality: format.quality_label,
-        ext: format.mime_type?.split(';')[0].split('/')[1] ?? 'N/A',
-        url: format.url,
-        has_audio: format.has_audio,
-        has_video: format.has_video
-      })) ?? [];
-
-      return NextResponse.json({
-        success: true,
-        title,
-        thumbnail,
-        formats: formats,
-      }, { status: 200 });
-
-    } else if (url.includes('tiktok.com')) {
-      // --- LÓGICA PARA TIKTOK (A IMPLEMENTAR) ---
-      console.log('URL de TikTok detectada. Funcionalidad no implementada.');
-      // TODO: Aquí se implementaría la lógica con una librería para TikTok.
-      return NextResponse.json({ success: false, error: 'Las descargas de TikTok aún no son compatibles.' }, { status: 501 });
-
-    } else if (url.includes('instagram.com')) {
-      // --- LÓGICA PARA INSTAGRAM (A IMPLEMENTAR) ---
-      console.log('URL de Instagram detectada. Funcionalidad no implementada.');
-      // TODO: Aquí se implementaría la lógica con una librería para Instagram.
-      return NextResponse.json({ success: false, error: 'Las descargas de Instagram aún no son compatibles.' }, { status: 501 });
-
-    } else {
-      return NextResponse.json({ success: false, error: 'La URL no corresponde a una plataforma compatible.' }, { status: 400 });
-    }
+    return NextResponse.json({
+      success: true,
+      title,
+      thumbnail,
+      formats: processedFormats,
+    }, { status: 200 });
 
   } catch (error) {
-    console.error('Error Crítico en /api/fetch-info:', error);
+    console.error('Error Crítico en /api/fetch-info con yt-dlp:', error);
+    
+    let errorMessage = 'No se pudo obtener la información del video. La herramienta yt-dlp falló en el servidor.';
+    let debugError = (error instanceof Error) ? error.message : String(error);
+
+    // yt-dlp suele incluir mensajes de error muy claros
+    if (debugError.includes('Unsupported URL')) {
+        errorMessage = 'La URL no corresponde a una plataforma compatible.';
+    } else if (debugError.includes('403')) {
+        errorMessage = 'Acceso prohibido. El video puede ser privado o requerir inicio de sesión.';
+    }
+
     return NextResponse.json({
       success: false,
-      error: 'No se pudo obtener la información del video. La URL puede ser incorrecta o el video no está disponible para el servidor.',
-      debug_error: (error instanceof Error) ? error.message : String(error),
+      error: errorMessage,
+      debug_error: debugError,
     }, { status: 500 });
   }
 }
 
-// Manejar otros métodos HTTP para que no queden desatendidos
+// Manejar otros métodos HTTP
 export async function GET() {
   return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
-}
-export async function PUT() {
-  return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
-}
-export async function DELETE() {
-  return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
-}
-export async function PATCH() {
-    return new NextResponse(null, { status: 405, statusText: 'Method Not Allowed' });
 }
