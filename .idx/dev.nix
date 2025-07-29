@@ -9,6 +9,7 @@
     pkgs.zulu
     pkgs.python313Full
     pkgs.yt-dlp
+    pkgs.ffmpeg
   ];
   # Sets environment variables in the workspace
   env = {};

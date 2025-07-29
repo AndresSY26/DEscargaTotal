@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from "@/hooks/use-toast";
 
 type Format = {
@@ -40,7 +39,7 @@ const formatFileSize = (bytes: number | null | undefined): string => {
 
 export function DownloadOptions({ info }: DownloadOptionsProps) {
   const { toast } = useToast();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
   
   const videoFormats = info.formats.filter(f => f.has_video).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
   const audioFormats = info.formats.filter(f => f.has_audio && !f.has_video).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
@@ -48,11 +47,24 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
   const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
 
   const handleDownload = async (format: Format) => {
-    setIsDownloading(true);
+    setDownloadingUrl(format.url);
 
     try {
-      if (!format.has_audio && bestAudio) {
-        // Video sin audio, necesita unir.
+      // Si el formato es solo audio, o si ya contiene video y audio, descarga directa.
+      if (format.has_audio) {
+        toast({ title: 'Iniciando descarga directa...' });
+        const a = document.createElement('a');
+        a.href = format.url;
+        // El navegador no siempre puede acceder a la URL directamente por CORS,
+        // pero setting download attribute helps.
+        a.setAttribute('download', `${info.title} - ${format.quality}.${format.ext}`);
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+      } else if (format.has_video && !format.has_audio && bestAudio) {
+        // Si el formato es solo video, necesita unirlo con el mejor audio en el servidor.
         toast({ title: 'Preparando descarga...', description: 'Uniendo video y audio. Esto puede tardar un momento.' });
         
         const response = await fetch('/api/download', {
@@ -75,17 +87,11 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         a.click();
         window.URL.revokeObjectURL(url);
         a.remove();
-
+        
+        toast({ title: '¡Descarga completada!', description: 'El archivo se ha guardado en tu dispositivo.'});
+      
       } else {
-        // Formato con audio o solo audio, descarga directa.
-        toast({ title: 'Iniciando descarga directa...' });
-        const a = document.createElement('a');
-        a.href = format.url;
-        a.setAttribute('download', `${info.title} - ${format.quality}.${format.ext}`);
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        throw new Error('No se encontró un formato de audio compatible para unir.');
       }
     } catch (error) {
        toast({
@@ -94,11 +100,11 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         description: error instanceof Error ? error.message : "Ocurrió un error desconocido.",
        });
     } finally {
-      setIsDownloading(false);
+      setDownloadingUrl(null);
     }
   };
 
-  const renderFormatTable = (formats: Format[], type: 'video' | 'audio') => {
+  const renderFormatTable = (formats: Format[]) => {
     return (
       <Table>
         <TableHeader>
@@ -110,26 +116,28 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {formats.map((format, index) => (
-            <TableRow key={index}>
-              <TableCell className="font-medium">
-                {format.quality}
-                {type === 'video' && !format.has_audio && <Badge variant="destructive" className="ml-2">Sin Audio</Badge>}
-              </TableCell>
-              <TableCell>{format.ext}</TableCell>
-              <TableCell>{formatFileSize(format.filesize)}</TableCell>
-              <TableCell className="text-right">
-                <Button size="sm" onClick={() => handleDownload(format)} disabled={isDownloading}>
-                  {isDownloading ? (
-                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Descargar
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+          {formats.map((format, index) => {
+            const isDownloading = downloadingUrl === format.url;
+            return (
+                <TableRow key={index}>
+                <TableCell className="font-medium">
+                    {format.quality}
+                </TableCell>
+                <TableCell>{format.ext}</TableCell>
+                <TableCell>{formatFileSize(format.filesize)}</TableCell>
+                <TableCell className="text-right">
+                    <Button size="sm" onClick={() => handleDownload(format)} disabled={!!downloadingUrl}>
+                    {isDownloading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                    )}
+                    {isDownloading ? 'Procesando...' : 'Descargar'}
+                    </Button>
+                </TableCell>
+                </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     );
@@ -164,14 +172,14 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
               </TabsList>
               <TabsContent value="video" className="mt-4">
                 {videoFormats.length > 0 ? (
-                  renderFormatTable(videoFormats, 'video')
+                  renderFormatTable(videoFormats)
                 ) : (
                   <p className="text-muted-foreground text-center p-8">No hay formatos de video disponibles.</p>
                 )}
               </TabsContent>
               <TabsContent value="audio" className="mt-4">
                 {audioFormats.length > 0 ? (
-                  renderFormatTable(audioFormats, 'audio')
+                  renderFormatTable(audioFormats)
                 ) : (
                   <p className="text-muted-foreground text-center p-8">No hay formatos de solo audio disponibles.</p>
                 )}
