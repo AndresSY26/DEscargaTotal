@@ -55,14 +55,11 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         toast({ title: 'Iniciando descarga directa...' });
         const a = document.createElement('a');
         a.href = format.url;
-        // El navegador no siempre puede acceder a la URL directamente por CORS,
-        // pero setting download attribute helps.
         a.setAttribute('download', `${info.title} - ${format.quality}.${format.ext}`);
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-
       } else if (format.has_video && !format.has_audio && bestAudio) {
         // Si el formato es solo video, necesita unirlo con el mejor audio en el servidor.
         toast({ title: 'Preparando descarga...', description: 'Uniendo video y audio. Esto puede tardar un momento.' });
@@ -70,7 +67,13 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         const response = await fetch('/api/download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoUrl: format.url, audioUrl: bestAudio.url }),
+          body: JSON.stringify({ 
+            videoUrl: format.url, 
+            audioUrl: bestAudio.url,
+            title: info.title,
+            quality: format.quality,
+            ext: format.ext
+          }),
         });
 
         if (!response.ok) {
@@ -82,7 +85,11 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${info.title} - ${format.quality}.mp4`;
+        
+        const safeTitle = (info.title || 'video').replace(/[^a-z0-9\\s]/gi, '').replace(/\\s+/g, '_');
+        const finalFilename = `${safeTitle}_${format.quality}.mkv`;
+        a.download = finalFilename;
+
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);

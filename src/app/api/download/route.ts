@@ -1,88 +1,81 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
+import { NextRequest } from 'next/server';
 import { spawn } from 'child_process';
-import YTDlpWrap from 'yt-dlp-wrap';
+import { PassThrough } from 'stream';
+import https from 'https';
+import http from 'http';
 
-const ytDlpWrap = new YTDlpWrap();
-
-async function runCommand(command: string, args: string[]): Promise<void> {
+// Función para obtener un stream desde una URL (soporta http y https)
+function getStream(url: string): Promise<http.IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const process = spawn(command, args, { stdio: 'pipe' });
-
-    process.stdout.on('data', (data) => console.log(`stdout: ${data}`));
-    process.stderr.on('data', (data) => console.error(`stderr: ${data}`));
-
-    process.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Command ${command} failed with code ${code}`));
+    const protocol = url.startsWith('https') ? https : http;
+    protocol.get(url, (response) => {
+      if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        // Manejar redirecciones
+        return getStream(response.headers.location).then(resolve).catch(reject);
       }
-    });
-    
-    process.on('error', (err) => {
-        reject(new Error(`Failed to start command ${command}: ${err.message}`));
-    });
+      resolve(response);
+    }).on('error', reject);
   });
 }
 
 export async function POST(req: NextRequest) {
-  let tempDir: string | null = null;
   try {
-    const body = await req.json();
-    const { videoUrl, audioUrl } = body;
+    const { videoUrl, audioUrl, title, quality, ext } = await req.json();
 
     if (!videoUrl || !audioUrl) {
-      return NextResponse.json({ success: false, error: 'Faltan las URLs de video o audio.' }, { status: 400 });
+      return new Response(JSON.stringify({ success: false, error: 'Faltan las URLs de video o audio.' }), { status: 400 });
     }
 
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'descarga-'));
-    console.log(`Directorio temporal creado: ${tempDir}`);
+    const videoStream = await getStream(videoUrl);
+    const audioStream = await getStream(audioUrl);
 
-    const videoPath = path.join(tempDir, 'video.tmp');
-    const audioPath = path.join(tempDir, 'audio.tmp');
-    const outputPath = path.join(tempDir, 'output.mp4');
+    // Creamos un stream de paso para enviar el resultado al cliente
+    const passThrough = new PassThrough();
 
-    console.log('Descargando video...');
-    await ytDlpWrap.exec([videoUrl, '-o', videoPath]);
-    console.log('Descargando audio...');
-    await ytDlpWrap.exec([audioUrl, '-o', audioPath]);
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', 'pipe:3', // Entrada de video desde el pipe 3
+      '-i', 'pipe:4', // Entrada de audio desde el pipe 4
+      '-c', 'copy',   // Copiar los códecs sin recodificar (muy rápido)
+      '-f', 'matroska', // Usar contenedor mkv por compatibilidad
+      'pipe:1'        // Salida al pipe 1 (stdout)
+    ], {
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'] // stdin, stdout, stderr, pipe3, pipe4
+    });
 
-    console.log('Uniendo archivos con FFmpeg...');
-    await runCommand('ffmpeg', [
-      '-i', videoPath,
-      '-i', audioPath,
-      '-c', 'copy', // Copia los códecs, no recodifica. Es muy rápido.
-      '-y', // Sobrescribe el archivo de salida si existe.
-      outputPath,
-    ]);
+    // Redirigir los streams de video y audio a los pipes de FFmpeg
+    videoStream.pipe(ffmpeg.stdio[3] as NodeJS.WritableStream);
+    audioStream.pipe(ffmpeg.stdio[4] as NodeJS.WritableStream);
 
-    console.log('Enviando archivo final...');
-    const finalFileBuffer = await fs.readFile(outputPath);
+    // Redirigir la salida de FFmpeg (el video unido) al stream de respuesta
+    ffmpeg.stdio[1].pipe(passThrough);
     
+    // Opcional: Escuchar por errores de FFmpeg
+    ffmpeg.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+    });
+
+    ffmpeg.on('close', (code) => {
+      console.log(`FFmpeg se cerró con código ${code}`);
+      passThrough.end();
+    });
+
+    // Configurar los encabezados para la descarga
     const headers = new Headers();
-    headers.set('Content-Type', 'video/mp4');
-    headers.set('Content-Length', finalFileBuffer.length.toString());
+    const safeTitle = (title || 'video').replace(/[^a-z0-9\s]/gi, '').replace(/\s+/g, '_');
+    const finalFilename = `${safeTitle}_${quality}.mkv`;
     
-    return new NextResponse(finalFileBuffer, { status: 200, headers });
+    headers.set('Content-Disposition', `attachment; filename="${finalFilename}"`);
+    headers.set('Content-Type', 'video/x-matroska');
+
+    // @ts-ignore - Necesario para usar el stream en la respuesta
+    return new Response(passThrough, { headers });
 
   } catch (error) {
-    console.error('Error Crítico en /api/download:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'No se pudo procesar la descarga en el servidor.',
-      debug_error: (error instanceof Error) ? error.message : String(error),
-    }, { status: 500 });
-  } finally {
-      if(tempDir) {
-          try {
-            await fs.rm(tempDir, { recursive: true, force: true });
-            console.log(`Directorio temporal eliminado: ${tempDir}`);
-          } catch(cleanupError) {
-              console.error('Error al limpiar el directorio temporal:', cleanupError);
-          }
-      }
+    console.error('Error en el endpoint de descarga por streaming:', error);
+    return new Response(JSON.stringify({
+        success: false,
+        error: 'No se pudo procesar la descarga en el servidor.',
+        debug_error: (error instanceof Error) ? error.message : String(error),
+    }), { status: 500 });
   }
 }
