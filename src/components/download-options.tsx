@@ -16,6 +16,7 @@ type Format = {
   has_audio: boolean;
   has_video: boolean;
   filesize: number | null;
+  format_id?: string;
 };
 
 type DownloadOptionsProps = {
@@ -24,6 +25,7 @@ type DownloadOptionsProps = {
     title: string;
     thumbnail: string;
     formats: Format[];
+    isTiktok: boolean;
   };
 };
 
@@ -41,6 +43,7 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
   const { toast } = useToast();
   const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
   
+  // --- Lógica de Formatos General ---
   const videoFormats = info.formats
     .filter(f => f.has_video && !f.quality.includes('x'))
     .sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
@@ -49,13 +52,20 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
   
   const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
 
-  const handleDownload = async (format: Format, isAudio: boolean = false) => {
+  // --- Lógica Específica para TikTok ---
+  const tiktokNoWatermarkVideo = info.isTiktok 
+    ? info.formats.find(f => f.format_id?.includes('h264_nowm') || f.format_id?.includes('nowm')) 
+    : null;
+
+
+  const handleDownload = async (format: Format, action: 'video' | 'audio' | 'tiktok-mp3' | 'tiktok-video') => {
     setDownloadingUrl(format.url);
 
     try {
-      if (isAudio) {
-        toast({ title: 'Iniciando descarga...', description: 'Tu archivo se está preparando.' });
-        const safeTitle = info.title.replace(/[/\\?%*:|"<>]/g, '-');
+      const safeTitle = info.title.replace(/[/\\?%*:|"<>]/g, '-');
+
+      if (action === 'audio' || (action === 'tiktok-video' && format.url)) {
+         toast({ title: 'Iniciando descarga...', description: 'Tu archivo se está preparando.' });
         const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(format.url)}&title=${encodeURIComponent(safeTitle)}&ext=${format.ext}`;
 
         const link = document.createElement('a');
@@ -64,8 +74,30 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-      
-      } else if (format.has_video && bestAudio) {
+
+      } else if (action === 'tiktok-mp3' && format.url) {
+        toast({ title: 'Preparando conversión a MP3...', description: 'Esto puede tardar un momento.' });
+        const proxyUrl = `/api/convert-to-mp3?url=${encodeURIComponent(format.url)}&title=${encodeURIComponent(safeTitle)}`;
+
+        // Hacemos el fetch para obtener el blob y forzar descarga
+        const response = await fetch(proxyUrl);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falló la conversión en el servidor.');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeTitle}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        toast({ title: '¡Descarga completada!', description: 'El MP3 se ha guardado en tu dispositivo.'});
+
+      } else if (action === 'video' && format.has_video && bestAudio) {
         toast({ title: 'Preparando descarga...', description: 'Uniendo video y audio. Esto puede tardar un momento.' });
         
         const response = await fetch('/api/download', {
@@ -109,7 +141,7 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
         toast({ title: '¡Descarga completada!', description: 'El archivo se ha guardado en tu dispositivo.'});
       
       } else {
-        throw new Error('No se encontró un formato de audio compatible para unir.');
+        throw new Error('No se encontró un formato de audio compatible para unir o la URL no es válida.');
       }
     } catch (error) {
        toast({
@@ -144,7 +176,7 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
                 <TableCell>{format.ext}</TableCell>
                 <TableCell>{formatFileSize(format.filesize)}</TableCell>
                 <TableCell className="text-right">
-                    <Button size="sm" onClick={() => handleDownload(format, isAudioTab)} disabled={!!downloadingUrl}>
+                    <Button size="sm" onClick={() => handleDownload(format, isAudioTab ? 'audio' : 'video')} disabled={!!downloadingUrl}>
                     {isDownloading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -160,6 +192,101 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
       </Table>
     );
   };
+  
+  const renderTikTokContent = () => {
+    if (!tiktokNoWatermarkVideo) {
+        return <p className="text-muted-foreground text-center p-8">No se encontró una versión sin marca de agua.</p>;
+    }
+    const isDownloading = downloadingUrl === tiktokNoWatermarkVideo.url;
+
+    return (
+        <Tabs defaultValue="video" className="mt-4">
+        <TabsList>
+            <TabsTrigger value="video">
+            <Clapperboard className="mr-2 h-4 w-4" /> Video (Sin Marca)
+            </TabsTrigger>
+            <TabsTrigger value="audio">
+            <Music className="mr-2 h-4 w-4" /> Audio MP3
+            </TabsTrigger>
+        </TabsList>
+        <TabsContent value="video" className="mt-4">
+             <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Calidad</TableHead>
+                        <TableHead>Formato</TableHead>
+                        <TableHead>Tamaño</TableHead>
+                        <TableHead className="text-right">Acción</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    <TableRow>
+                        <TableCell className="font-medium">{tiktokNoWatermarkVideo.quality} (Sin Marca)</TableCell>
+                        <TableCell>{tiktokNoWatermarkVideo.ext}</TableCell>
+                        <TableCell>{formatFileSize(tiktokNoWatermarkVideo.filesize)}</TableCell>
+                        <TableCell className="text-right">
+                             <Button size="sm" onClick={() => handleDownload(tiktokNoWatermarkVideo, 'tiktok-video')} disabled={!!downloadingUrl}>
+                                {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                                {isDownloading ? 'Descargando...' : 'Descargar'}
+                            </Button>
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+             </Table>
+        </TabsContent>
+        <TabsContent value="audio" className="mt-4">
+             <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Calidad</TableHead>
+                        <TableHead>Formato</TableHead>
+                        <TableHead className="text-right">Acción</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    <TableRow>
+                        <TableCell className="font-medium">128kbps</TableCell>
+                        <TableCell>mp3</TableCell>
+                        <TableCell className="text-right">
+                             <Button size="sm" onClick={() => handleDownload(tiktokNoWatermarkVideo, 'tiktok-mp3')} disabled={!!downloadingUrl}>
+                                {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                                {isDownloading ? 'Convirtiendo...' : 'Descargar'}
+                            </Button>
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+             </Table>
+        </TabsContent>
+        </Tabs>
+    )
+  }
+
+  const renderDefaultContent = () => (
+    <Tabs defaultValue="video" className="mt-4">
+        <TabsList>
+        <TabsTrigger value="video">
+            <Clapperboard className="mr-2 h-4 w-4" /> Video
+        </TabsTrigger>
+        <TabsTrigger value="audio">
+            <Music className="mr-2 h-4 w-4" /> Audio
+        </TabsTrigger>
+        </TabsList>
+        <TabsContent value="video" className="mt-4">
+        {videoFormats.length > 0 ? (
+            renderFormatTable(videoFormats, false)
+        ) : (
+            <p className="text-muted-foreground text-center p-8">No hay formatos de video disponibles.</p>
+        )}
+        </TabsContent>
+        <TabsContent value="audio" className="mt-4">
+        {audioFormats.length > 0 ? (
+            renderFormatTable(audioFormats, true)
+        ) : (
+            <p className="text-muted-foreground text-center p-8">No hay formatos de solo audio disponibles.</p>
+        )}
+        </TabsContent>
+    </Tabs>
+  );
 
   return (
     <Card className="w-full bg-white dark:bg-black/50 border-primary/20 shadow-xl animate-in fade-in-50 slide-in-from-bottom-5 duration-500">
@@ -179,30 +306,8 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
               {info.title}
             </h2>
 
-            <Tabs defaultValue="video" className="mt-4">
-              <TabsList>
-                <TabsTrigger value="video">
-                  <Clapperboard className="mr-2 h-4 w-4" /> Video
-                </TabsTrigger>
-                <TabsTrigger value="audio">
-                  <Music className="mr-2 h-4 w-4" /> Audio
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="video" className="mt-4">
-                {videoFormats.length > 0 ? (
-                  renderFormatTable(videoFormats, false)
-                ) : (
-                  <p className="text-muted-foreground text-center p-8">No hay formatos de video disponibles.</p>
-                )}
-              </TabsContent>
-              <TabsContent value="audio" className="mt-4">
-                {audioFormats.length > 0 ? (
-                  renderFormatTable(audioFormats, true)
-                ) : (
-                  <p className="text-muted-foreground text-center p-8">No hay formatos de solo audio disponibles.</p>
-                )}
-              </TabsContent>
-            </Tabs>
+            {info.isTiktok ? renderTikTokContent() : renderDefaultContent()}
+            
           </div>
         </div>
       </CardContent>

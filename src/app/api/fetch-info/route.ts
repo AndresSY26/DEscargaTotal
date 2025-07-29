@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
     
     const { title, thumbnail, formats } = metadata;
 
+    const isTiktok = url.includes('tiktok.com');
+
     // Mapear los formatos a la estructura que el front-end espera
     const processedFormats = formats.map(format => ({
       quality: format.format_note || format.resolution || 'N/A',
@@ -34,7 +36,8 @@ export async function POST(req: NextRequest) {
       url: format.url,
       has_audio: format.acodec !== 'none',
       has_video: format.vcodec !== 'none',
-      filesize: format.filesize || format.filesize_approx || null
+      filesize: format.filesize || format.filesize_approx || null,
+      format_id: format.format_id,
     }));
 
     return NextResponse.json({
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
       title,
       thumbnail,
       formats: processedFormats,
+      isTiktok, // Enviamos una bandera para que el frontend sepa cómo comportarse
     }, { status: 200 });
 
   } catch (error) {
