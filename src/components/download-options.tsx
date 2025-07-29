@@ -41,7 +41,10 @@ export function DownloadOptions({ info }: DownloadOptionsProps) {
   const { toast } = useToast();
   const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
   
-  const videoFormats = info.formats.filter(f => f.has_video).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
+  const videoFormats = info.formats
+    .filter(f => f.has_video && !f.quality.includes('x'))
+    .sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
+    
   const audioFormats = info.formats.filter(f => f.has_audio && !f.has_video).sort((a,b) => (b.filesize || 0) - (a.filesize || 0));
   
   const bestAudio = audioFormats.length > 0 ? audioFormats[0] : null;
