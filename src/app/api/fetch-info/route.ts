@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import YTDlpWrap from 'yt-dlp-wrap';
-import * as TikTokAPI from '@tobyg74/tiktok-api-dl'; // <-- PASO 1: Importar el módulo completo
+const TikTokAPI = require('@tobyg74/tiktok-api-dl');
 
 // Inicializar yt-dlp-wrap para YouTube
 const ytDlpWrap = new YTDlpWrap();
