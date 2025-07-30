@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import YTDlpWrap from 'yt-dlp-wrap';
-import { dl as tiktokDL } from '@tobyg74/tiktok-api-dl'; // <-- IMPORTACIÓN CORREGIDA AQUÍ
+import * as TikTokAPI from '@tobyg74/tiktok-api-dl'; // <-- PASO 1: Importar el módulo completo
 
 // Inicializar yt-dlp-wrap para YouTube
 const ytDlpWrap = new YTDlpWrap();
@@ -18,8 +18,9 @@ export async function POST(req: NextRequest) {
         // --- LÓGICA ESPECIALIZADA PARA TIKTOK ---
         console.log('Procesando URL de TikTok con @tobyg74/tiktok-api-dl...');
         
-        const result = await tiktokDL(url, {
-            version: 'v2' // Usar la versión 2 del API de TikTok
+        // PASO 2: Usar la función 'dl' desde el módulo importado
+        const result = await TikTokAPI.dl(url, {
+            version: 'v2'
         });
 
         if (result.status !== 'success' || !result.result) {
@@ -31,7 +32,6 @@ export async function POST(req: NextRequest) {
 
         const formats = [];
 
-        // Añadir video sin marca de agua
         if (result.result.video.nowatermark) {
             formats.push({
                 quality: 'Sin Marca de Agua',
@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Añadir el audio original
         if (result.result.music.play_url) {
             formats.push({
                 quality: 'Audio Original',
@@ -90,9 +89,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('Error Crítico en /api/fetch-info:', error);
-    
     const debugError = (error instanceof Error) ? error.message : String(error);
-
     return NextResponse.json({
       success: false,
       error: 'No se pudo obtener la información del video.',
