@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import YTDlpWrap from 'yt-dlp-wrap';
-import TikTokAPI from '@tobyg74/tiktok-api-dl';
 
 // Inicializar yt-dlp-wrap para YouTube
 const ytDlpWrap = new YTDlpWrap();
@@ -15,39 +14,39 @@ export async function POST(req: NextRequest) {
     }
 
     if (url.includes('tiktok.com')) {
-        // --- LÓGICA ESPECIALIZADA PARA TIKTOK ---
-        console.log('Procesando URL de TikTok con @tobyg74/tiktok-api-dl...');
+        // --- LÓGICA FINAL Y ROBUSTA PARA TIKTOK ---
+        console.log('Procesando URL de TikTok con @faouzkk/tiktok-dl...');
         
-        // PASO 2: Usar la función 'dl' desde el módulo importado
-        const result = await TikTokAPI.dl(url, {
-            version: 'v2'
-        });
+        // Importar la nueva librería
+        const tiktokdl = require('@faouzkk/tiktok-dl');
+        
+        const result = await tiktokdl(url);
 
-        if (result.status !== 'success' || !result.result) {
-            throw new Error('La librería de TikTok no pudo obtener la información.');
+        if (!result || !result.video || result.video.no_watermark.length === 0) {
+            throw new Error('La librería de TikTok no pudo obtener la información o no encontró un video sin marca de agua.');
         }
 
-        const title = result.result.description || 'Título no disponible';
-        const thumbnail = result.result.video.cover;
+        const title = result.description || 'Título no disponible';
+        const thumbnail = result.video.cover;
 
         const formats = [];
 
-        if (result.result.video.nowatermark) {
-            formats.push({
-                quality: 'Sin Marca de Agua',
-                ext: 'mp4',
-                url: result.result.video.nowatermark,
-                has_video: true,
-                has_audio: true,
-                format_id: 'tiktok-nowm',
-            });
-        }
+        // Añadir video sin marca de agua
+        formats.push({
+            quality: 'Sin Marca de Agua',
+            ext: 'mp4',
+            url: result.video.no_watermark,
+            has_video: true,
+            has_audio: true,
+            format_id: 'tiktok-nowm',
+        });
 
-        if (result.result.music.play_url) {
+        // Añadir el audio original
+        if (result.music.play_url) {
             formats.push({
                 quality: 'Audio Original',
                 ext: 'mp3',
-                url: result.result.music.play_url,
+                url: result.music.play_url,
                 has_video: false,
                 has_audio: true,
                 format_id: 'tiktok-audio',
