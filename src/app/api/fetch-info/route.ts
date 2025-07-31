@@ -17,14 +17,16 @@ export async function POST(req: NextRequest) {
         // --- LÓGICA FINAL Y ROBUSTA PARA TIKTOK ---
         console.log('Procesando URL de TikTok con @faouzkk/tiktok-dl...');
         
-        // Importar la nueva librería
         const tiktokdl = require('@faouzkk/tiktok-dl');
         
         const result = await tiktokdl(url);
 
-        if (!result || !result.video || result.video.no_watermark.length === 0) {
-            throw new Error('La librería de TikTok no pudo obtener la información o no encontró un video sin marca de agua.');
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Verificación robusta para asegurar que la respuesta es válida
+        if (!result || !result.video || !result.video.no_watermark) {
+            throw new Error("La respuesta de la librería de TikTok no contiene un video válido sin marca de agua.");
         }
+        // --- FIN DE LA CORRECCIÓN ---
 
         const title = result.description || 'Título no disponible';
         const thumbnail = result.video.cover;
@@ -41,8 +43,8 @@ export async function POST(req: NextRequest) {
             format_id: 'tiktok-nowm',
         });
 
-        // Añadir el audio original
-        if (result.music.play_url) {
+        // Añadir el audio original (con verificación de seguridad)
+        if (result.music && result.music.play_url) {
             formats.push({
                 quality: 'Audio Original',
                 ext: 'mp3',
