@@ -1,62 +1,67 @@
-# ---- Fase de Construcción (Build Stage) ----
+# ---- Fase 1: Construcción (Build Stage) ----
+# Aquí se instalan todas las dependencias (de desarrollo y de sistema)
+# y se construye la aplicación de Next.js.
 
 # 1. Usar una imagen oficial de Node.js como base.
 FROM node:20-slim AS builder
 
-# 2. Instalar las dependencias del sistema operativo que necesitamos
-# - python3 y pip para poder instalar yt-dlp
-# - ffmpeg para procesar audio y video
+# 2. Instalar dependencias del sistema operativo: Python, Pip y FFmpeg
 RUN apt-get update && apt-get install -y python3 python3-pip ffmpeg
 
-# 3. Instalar yt-dlp usando pip
+# 3. Instalar yt-dlp usando pip (la 'U' lo actualiza si ya existe)
 RUN pip3 install -U yt-dlp
 
 # 4. Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# 5. Copiar los archivos de dependencias de Node.js
-COPY package.json package-lock.json ./
+# 5. Copiar los archivos de manifiesto de dependencias
+COPY package.json package-lock.json* ./
 
-# 6. Instalar las dependencias de Node.js
+# 6. Instalar las dependencias de Node.js de forma optimizada para CI/CD
 RUN npm ci
 
-# 7. Copiar el resto del código de la aplicación
+# 7. Copiar el resto del código fuente de la aplicación
 COPY . .
 
-# 8. Construir la aplicación de Next.js para producción
+# 8. Construir la aplicación para producción
 RUN npm run build
 
-# ---- Fase de Producción (Production Stage) ----
 
-# 1. Usar una imagen más ligera para la versión final
+# ---- Fase 2: Producción (Production Stage) ----
+# Aquí se crea la imagen final, que es más ligera. Solo contendrá lo
+# estrictamente necesario para ejecutar la aplicación construida.
+
+# 1. Usar una imagen base de Node.js ligera para la versión final
 FROM node:20-slim AS runner
+
+# 2. Establecer el directorio de trabajo
 WORKDIR /app
 
-# 2. Instalar SOLO las dependencias de sistema necesarias para correr la app
-RUN apt-get update && apt-get install -y --no-install-recommends python3 ffmpeg \
-    # Instalar yt-dlp de forma eficiente
+# 3. Instalar SOLO las dependencias de sistema necesarias para la EJECUCIÓN:
+#    Python (para yt-dlp), Pip (para instalar yt-dlp), y FFmpeg (para procesar).
+#    --no-install-recommends evita instalar paquetes opcionales para una imagen más pequeña.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg \
+    # Instalar yt-dlp usando pip
     && pip3 install -U yt-dlp \
-    # Limpiar la caché para reducir el tamaño de la imagen
+    # Limpiar la caché de apt para reducir el tamaño final de la imagen
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Crear un usuario no-root para mejorar la seguridad
+# 4. Crear un grupo y un usuario no-root para correr la aplicación de forma segura
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# 4. Copiar los archivos de la app construida desde la fase anterior
+# 5. Copiar los artefactos construidos desde la fase 'builder'
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-
-# 5. Cambiar el propietario de los archivos al nuevo usuario
-RUN chown -R nextjs:nodejs /app/.next
 
 # 6. Cambiar al usuario no-root
 USER nextjs
 
-# 7. Exponer el puerto en el que corre la aplicación (Next.js usa el 3000 por defecto)
+# 7. Exponer el puerto en el que Next.js corre por defecto
 EXPOSE 3000
 
-# 8. El comando para iniciar la aplicación
+# 8. El comando que se ejecutará para iniciar la aplicación
+# Usa 'npm start', que Next.js define automáticamente para producción.
 CMD ["npm", "start"]
