@@ -1,2 +1,0 @@
-[phases.setup]
-nixPkgs = ["pkgs.nodejs_20", "pkgs.python313Full", "pkgs.yt-dlp", "pkgs.ffmpeg"]
